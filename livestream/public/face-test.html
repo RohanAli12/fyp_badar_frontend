@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Face Detection</title>
+    <script src="face-api.js"></script>
+    <style>
+      body {
+        font-family: sans-serif;
+        background: #f7fafc;
+        text-align: center;
+      }
+      .container {
+        position: relative;
+        width: 640px;
+        height: 480px;
+        margin: 0 auto;
+      }
+      #extImage,
+      #video,
+      #canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 640px;
+        height: 480px;
+        display: none;
+      }
+      #canvas {
+        z-index: 2;
+        pointer-events: none;
+      }
+      #extImage,
+      #video {
+        z-index: 1;
+      }
+      h1 {
+        margin-top: 2rem;
+      }
+      .input-row {
+        margin-bottom: 1rem;
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        align-items: center;
+      }
+      #rollNumber {
+        padding: 0.5rem;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        width: 180px;
+      }
+      #cameraUrl {
+        padding: 0.5rem;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        width: 350px;
+      }
+      #startBtn {
+        padding: 0.5rem 1.5rem;
+        border-radius: 8px;
+        border: none;
+        background: #667eea;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      #startBtn:disabled {
+        background: #a0aec0;
+        cursor: not-allowed;
+      }
+      .mode-row {
+        margin-bottom: 1rem;
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        align-items: center;
+      }
+      .mode-radio {
+        margin-right: 0.5rem;
+      }
+      .stored-faces {
+        margin-top: 2rem;
+        padding: 1rem;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .stored-faces h3 {
+        margin-top: 0;
+        color: #2d3748;
+      }
+      .faces-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+      .face-item {
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.5rem;
+        background: #f8fafc;
+        transition: all 0.2s;
+      }
+      .face-item:hover {
+        border-color: #667eea;
+        transform: translateY(-2px);
+      }
+      .face-item img {
+        width: 100%;
+        height: 120px;
+        object-fit: cover;
+        border-radius: 4px;
+        margin-bottom: 0.5rem;
+      }
+      .face-item .face-name {
+        font-size: 0.875rem;
+        color: #4a5568;
+        word-break: break-word;
+      }
+      .api-status {
+        margin-top: 1rem;
+        padding: 0.5rem;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+      .api-status.success {
+        background: #c6f6d5;
+        color: #22543d;
+      }
+      .api-status.error {
+        background: #fed7d7;
+        color: #742a2a;
+      }
+      .api-status.loading {
+        background: #bee3f8;
+        color: #2a4365;
+      }
+      #loadFacesBtn {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        border: none;
+        background: #48bb78;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        margin-left: 1rem;
+      }
+      #loadFacesBtn:hover {
+        background: #38a169;
+      }
+      .comparison-results {
+        margin-top: 1rem;
+        padding: 1rem;
+        background: #f0fff4;
+        border-radius: 8px;
+        border-left: 4px solid #48bb78;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Face Detection</h1>
+    <p>Enter roll number and select camera mode</p>
+    <div class="input-row">
+      <input type="text" id="rollNumber" placeholder="Enter Roll Number" />
+      <div class="mode-row">
+        <label
+          ><input
+            type="radio"
+            name="cameraMode"
+            id="modeLocal"
+            class="mode-radio"
+            value="local"
+            checked
+          />Local Camera</label
+        >
+        <label
+          ><input
+            type="radio"
+            name="cameraMode"
+            id="modeExternal"
+            class="mode-radio"
+            value="external"
+          />External Camera</label
+        >
+      </div>
+      <input
+        type="text"
+        id="cameraUrl"
+        placeholder="http://192.168.100.20:8080/video"
+        style="display: none"
+      />
+      <button id="startBtn" onclick="startExternalDetection()" disabled>
+        Start Detection
+      </button>
+      <button id="loadFacesBtn" onclick="viewAllStoredFaces()">
+        View All Faces
+      </button>
+      <button
+        id="viewHistoryBtn"
+        onclick="displayMatchHistory()"
+        style="margin-left: 1rem"
+      >
+        View Match History
+      </button>
+    </div>
+    <div class="container">
+      <img id="extImage" width="640" height="480" crossorigin="anonymous" />
+      <video id="video" width="640" height="480" autoplay muted></video>
+      <canvas id="canvas" width="640" height="480"></canvas>
+    </div>
+    <div id="status"></div>
+    <div id="apiStatus" class="api-status" style="display: none"></div>
+    <div id="storedFaces" class="stored-faces" style="display: none">
+      <h3>Stored Faces from Database</h3>
+      <div id="facesGrid" class="faces-grid"></div>
+    </div>
+    <div
+      id="comparisonResults"
+      class="comparison-results"
+      style="display: none"
+    ></div>
+    <script>
+      const video = document.getElementById("video");
+      const extImage = document.getElementById("extImage");
+      const canvas = document.getElementById("canvas");
+      const statusDiv = document.getElementById("status");
+      const cameraUrlInput = document.getElementById("cameraUrl");
+      const rollNumberInput = document.getElementById("rollNumber");
+      const startBtn = document.getElementById("startBtn");
+      const modeLocal = document.getElementById("modeLocal");
+      const modeExternal = document.getElementById("modeExternal");
+      const loadFacesBtn = document.getElementById("loadFacesBtn");
+      const storedFacesDiv = document.getElementById("storedFaces");
+      const facesGrid = document.getElementById("facesGrid");
+      const apiStatusDiv = document.getElementById("apiStatus");
+      const comparisonResultsDiv = document.getElementById("comparisonResults");
+
+      let detectionInterval = null;
+      let currentRollNumber = "";
+      let currentStream = null;
+      let cameraMode = "local";
+      let storedFaces = [];
+      let currentDetections = [];
+      let storedFaceDescriptors = []; // Store face descriptors for comparison
+      let targetFaceDescriptor = null; // Store the target face descriptor for the specific roll number
+      let matchFound = false; // Track if a match has been found
+      let screenshotTaken = false; // Track if screenshot has been taken for this session
+
+      // API Configuration
+      const API_BASE_URL = "http://localhost:8000"; // Change this to your backend URL
+      const API_ENDPOINT = "/api/public/faces/";
+
+      // Always use absolute URL to avoid interceptors
+      const getApiUrl = () => {
+        const url = API_BASE_URL + API_ENDPOINT;
+        console.log("Generated API URL:", url);
+        return url;
+      };
+
+      // Camera mode switching
+      modeLocal.addEventListener("change", updateCameraMode);
+      modeExternal.addEventListener("change", updateCameraMode);
+      function updateCameraMode() {
+        cameraMode = modeLocal.checked ? "local" : "external";
+        if (cameraMode === "local") {
+          cameraUrlInput.style.display = "none";
+        } else {
+          cameraUrlInput.style.display = "inline-block";
+        }
+      }
+      updateCameraMode();
+
+      rollNumberInput.addEventListener("input", function () {
+        startBtn.disabled = !rollNumberInput.value.trim();
+      });
+
+      function log(message) {
+        console.log(message);
+      }
+
+      function showApiStatus(message, type = "loading") {
+        apiStatusDiv.textContent = message;
+        apiStatusDiv.className = `api-status ${type}`;
+        apiStatusDiv.style.display = "block";
+      }
+
+      function hideApiStatus() {
+        apiStatusDiv.style.display = "none";
+      }
+
+      async function loadStoredFaces() {
+        showApiStatus("Loading faces from API...", "loading");
+
+        try {
+          const response = await fetch(getApiUrl(), {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            mode: "cors",
+          });
+          console.log("API Response status:", response.status);
+          console.log("API Response headers:", response.headers);
+          console.log(
+            "Content-Type header:",
+            response.headers.get("content-type")
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          // Get the raw text first to debug
+          const responseText = await response.text();
+          console.log("API Response text:", responseText);
+          console.log("Response starts with:", responseText.substring(0, 50));
+
+          // Try to parse as JSON
+          let data;
+          try {
+            data = JSON.parse(responseText);
+          } catch (parseError) {
+            console.error("JSON Parse Error:", parseError);
+            console.error("Response was not valid JSON:", responseText);
+            throw new Error(
+              `Invalid JSON response: ${responseText.substring(0, 100)}...`
+            );
+          }
+
+          storedFaces = data.files || [];
+
+          if (storedFaces.length === 0) {
+            showApiStatus("No faces found in database", "error");
+            storedFacesDiv.style.display = "none";
+            return;
+          }
+
+          // Don't display stored faces grid by default - only load for recognition
+          showApiStatus(
+            `Loaded ${storedFaces.length} faces successfully`,
+            "success"
+          );
+          storedFacesDiv.style.display = "none"; // Hide the grid since we're doing targeted search
+
+          // Load face descriptors for recognition
+          await loadStoredFaceDescriptors();
+        } catch (error) {
+          console.error("Error loading faces:", error);
+          showApiStatus(`Error loading faces: ${error.message}`, "error");
+          storedFacesDiv.style.display = "none";
+        }
+      }
+
+      async function viewAllStoredFaces() {
+        showApiStatus("Loading faces from API...", "loading");
+
+        try {
+          const response = await fetch(getApiUrl(), {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            mode: "cors",
+          });
+          console.log("API Response status:", response.status);
+          console.log("API Response headers:", response.headers);
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          // Get the raw text first to debug
+          const responseText = await response.text();
+          console.log("API Response text:", responseText);
+
+          // Try to parse as JSON
+          let data;
+          try {
+            data = JSON.parse(responseText);
+          } catch (parseError) {
+            console.error("JSON Parse Error:", parseError);
+            console.error("Response was not valid JSON:", responseText);
+            throw new Error(
+              `Invalid JSON response: ${responseText.substring(0, 100)}...`
+            );
+          }
+
+          storedFaces = data.files || [];
+
+          if (storedFaces.length === 0) {
+            showApiStatus("No faces found in database", "error");
+            storedFacesDiv.style.display = "none";
+            return;
+          }
+
+          displayStoredFaces();
+          showApiStatus(
+            `Displaying ${storedFaces.length} faces from database`,
+            "success"
+          );
+          storedFacesDiv.style.display = "block";
+        } catch (error) {
+          console.error("Error loading faces:", error);
+          showApiStatus(`Error loading faces: ${error.message}`, "error");
+          storedFacesDiv.style.display = "none";
+        }
+      }
+
+      async function loadStoredFaceDescriptors() {
+        if (!checkFaceApi() || storedFaces.length === 0) return;
+
+        showApiStatus("Loading face descriptors for recognition...", "loading");
+        storedFaceDescriptors = [];
+
+        try {
+          // Ensure models are loaded before processing faces
+          await loadModels();
+
+          for (let i = 0; i < storedFaces.length; i++) {
+            const face = storedFaces[i];
+            try {
+              // Create an image element to load the stored face
+              const img = new Image();
+              img.crossOrigin = "anonymous";
+
+              await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = face.url;
+              });
+
+              // Detect faces and extract descriptors
+              const detections = await faceapi
+                .detectAllFaces(img)
+                .withFaceLandmarks()
+                .withFaceDescriptors();
+
+              if (detections.length > 0) {
+                // Store the descriptor with face info
+                storedFaceDescriptors.push({
+                  face: face,
+                  descriptor: detections[0].descriptor,
+                });
+                log(`Loaded descriptor for ${face.name}`);
+              } else {
+                log(`No face detected in ${face.name}`);
+              }
+            } catch (error) {
+              console.error(
+                `Error loading descriptor for ${face.name}:`,
+                error
+              );
+            }
+          }
+
+          showApiStatus(
+            `Loaded ${storedFaceDescriptors.length} face descriptors for recognition`,
+            "success"
+          );
+          log(
+            `Ready for face recognition with ${storedFaceDescriptors.length} stored faces`
+          );
+        } catch (error) {
+          console.error("Error loading face descriptors:", error);
+          showApiStatus("Error loading face descriptors", "error");
+        }
+      }
+
+      async function findTargetFaceByRollNumber(rollNumber) {
+        if (!rollNumber || storedFaceDescriptors.length === 0) {
+          return null;
+        }
+
+        // Look for faces that contain the roll number in their filename
+        const targetFaces = storedFaceDescriptors.filter((faceData) => {
+          const faceName = faceData.face.name.toLowerCase();
+          const rollNumberLower = rollNumber.toLowerCase();
+          return faceName.includes(rollNumberLower);
+        });
+
+        if (targetFaces.length === 0) {
+          showApiStatus(
+            `No face found for roll number: ${rollNumber}`,
+            "error"
+          );
+          return null;
+        }
+
+        // Use the first matching face (you could implement logic to handle multiple matches)
+        const targetFace = targetFaces[0];
+        showApiStatus(
+          `Found target face for roll number ${rollNumber}: ${targetFace.face.name}`,
+          "success"
+        );
+
+        return targetFace;
+      }
+
+      function takeScreenshot() {
+        if (screenshotTaken) return; // Prevent multiple screenshots
+
+        try {
+          // Create a canvas to capture the current view
+          const screenshotCanvas = document.createElement("canvas");
+          const ctx = screenshotCanvas.getContext("2d");
+
+          // Set canvas size to match the container
+          screenshotCanvas.width = 640;
+          screenshotCanvas.height = 480;
+
+          // Draw the current video/image frame
+          if (cameraMode === "local" && video.style.display !== "none") {
+            ctx.drawImage(video, 0, 0, 640, 480);
+          } else if (extImage.style.display !== "none") {
+            ctx.drawImage(extImage, 0, 0, 640, 480);
+          }
+
+          // Draw the detection overlay
+          if (canvas.style.display !== "none") {
+            ctx.drawImage(canvas, 0, 0);
+          }
+
+          // Create organized filename with folder structure
+          const now = new Date();
+          const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+          const timeStr = now.toISOString().slice(11, 19).replace(/:/g, "-"); // HH-MM-SS
+          const timestamp = now.getTime();
+
+          // Create folder structure: face_matches/YYYY-MM-DD/
+          const folderName = `face_matches/${dateStr}`;
+          const fileName = `match_${currentRollNumber}_${timeStr}_${timestamp}.png`;
+          const fullPath = `${folderName}/${fileName}`;
+
+          // Convert to blob and download
+          screenshotCanvas.toBlob((blob) => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fullPath; // This will create the folder structure
+
+            // Add metadata to the download
+            a.setAttribute("data-roll-number", currentRollNumber);
+            a.setAttribute("data-match-time", now.toISOString());
+            a.setAttribute(
+              "data-target-face",
+              targetFaceDescriptor ? targetFaceDescriptor.face.name : "unknown"
+            );
+
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            log("Screenshot taken and downloaded");
+            showApiStatus(`Screenshot saved: ${fullPath}`, "success");
+
+            // Store match data in localStorage for tracking
+            storeMatchData(currentRollNumber, fullPath, now);
+          }, "image/png");
+
+          screenshotTaken = true;
+        } catch (error) {
+          console.error("Error taking screenshot:", error);
+          showApiStatus("Error taking screenshot", "error");
+        }
+      }
+
+      function storeMatchData(rollNumber, filePath, timestamp) {
+        try {
+          // Get existing match data
+          const existingData = localStorage.getItem("faceMatchHistory") || "[]";
+          const matchHistory = JSON.parse(existingData);
+
+          // Create new match record
+          const matchRecord = {
+            id: Date.now(),
+            rollNumber: rollNumber,
+            fileName: filePath,
+            timestamp: timestamp.toISOString(),
+            targetFace: targetFaceDescriptor
+              ? targetFaceDescriptor.face.name
+              : "unknown",
+            cameraMode: cameraMode,
+            similarity: currentDetections.length > 0 ? "detected" : "unknown",
+          };
+
+          // Add to history
+          matchHistory.push(matchRecord);
+
+          // Keep only last 100 records
+          if (matchHistory.length > 100) {
+            matchHistory.splice(0, matchHistory.length - 100);
+          }
+
+          // Save back to localStorage
+          localStorage.setItem(
+            "faceMatchHistory",
+            JSON.stringify(matchHistory)
+          );
+
+          log(`Match data stored: ${rollNumber} at ${timestamp.toISOString()}`);
+        } catch (error) {
+          console.error("Error storing match data:", error);
+        }
+      }
+
+      function getMatchHistory() {
+        try {
+          const existingData = localStorage.getItem("faceMatchHistory") || "[]";
+          return JSON.parse(existingData);
+        } catch (error) {
+          console.error("Error reading match history:", error);
+          return [];
+        }
+      }
+
+      function displayMatchHistory() {
+        const history = getMatchHistory();
+        if (history.length === 0) {
+          showApiStatus("No match history found", "info");
+          return;
+        }
+
+        let historyHTML =
+          '<h4>Recent Face Matches</h4><div style="max-height: 300px; overflow-y: auto;">';
+        historyHTML +=
+          '<table style="width: 100%; border-collapse: collapse; font-size: 12px;">';
+        historyHTML +=
+          '<tr style="background: #f0f0f0;"><th>Date</th><th>Roll Number</th><th>Target Face</th><th>File</th></tr>';
+
+        // Show most recent first
+        history.reverse().forEach((match) => {
+          const date = new Date(match.timestamp).toLocaleString();
+          historyHTML += `<tr style="border-bottom: 1px solid #ddd;">`;
+          historyHTML += `<td>${date}</td>`;
+          historyHTML += `<td>${match.rollNumber}</td>`;
+          historyHTML += `<td>${match.targetFace}</td>`;
+          historyHTML += `<td>${match.fileName}</td>`;
+          historyHTML += `</tr>`;
+        });
+
+        historyHTML += "</table></div>";
+
+        // Create a modal or update existing div
+        const historyDiv =
+          document.getElementById("matchHistory") || createHistoryDiv();
+        historyDiv.innerHTML = historyHTML;
+        historyDiv.style.display = "block";
+
+        // Add keyboard event listener for Escape key
+        const handleEscape = (event) => {
+          if (event.key === "Escape") {
+            closeHistoryModal();
+            document.removeEventListener("keydown", handleEscape);
+          }
+        };
+        document.addEventListener("keydown", handleEscape);
+      }
+
+      function createHistoryDiv() {
+        const div = document.createElement("div");
+        div.id = "matchHistory";
+        div.style.cssText = `
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+          z-index: 1000;
+          max-width: 80%;
+          max-height: 80%;
+          overflow: auto;
+        `;
+
+        // Add close button
+        const closeBtn = document.createElement("button");
+        closeBtn.textContent = "✕";
+        closeBtn.title = "Close History";
+        closeBtn.style.cssText = `
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          background: #f56565;
+          border: none;
+          border-radius: 50%;
+          width: 30px;
+          height: 30px;
+          font-size: 16px;
+          cursor: pointer;
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background-color 0.2s;
+        `;
+        closeBtn.onmouseover = () => {
+          closeBtn.style.background = "#e53e3e";
+        };
+        closeBtn.onmouseout = () => {
+          closeBtn.style.background = "#f56565";
+        };
+        closeBtn.onclick = () => closeHistoryModal();
+        div.appendChild(closeBtn);
+
+        // Add backdrop click to close
+        const backdrop = document.createElement("div");
+        backdrop.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0,0,0,0.5);
+          z-index: 999;
+        `;
+        backdrop.id = "historyBackdrop";
+        backdrop.onclick = () => closeHistoryModal();
+        document.body.appendChild(backdrop);
+
+        document.body.appendChild(div);
+        return div;
+      }
+
+      function closeHistoryModal() {
+        const historyDiv = document.getElementById("matchHistory");
+        const backdrop = document.getElementById("historyBackdrop");
+
+        if (historyDiv) {
+          historyDiv.style.display = "none";
+        }
+        if (backdrop) {
+          backdrop.remove();
+        }
+      }
+
+      function displayStoredFaces() {
+        facesGrid.innerHTML = "";
+
+        storedFaces.forEach((face, index) => {
+          const faceItem = document.createElement("div");
+          faceItem.className = "face-item";
+
+          const img = document.createElement("img");
+          img.src = face.url;
+          img.alt = face.name;
+          img.crossOrigin = "anonymous";
+
+          const nameDiv = document.createElement("div");
+          nameDiv.className = "face-name";
+          nameDiv.textContent = face.name;
+
+          faceItem.appendChild(img);
+          faceItem.appendChild(nameDiv);
+          facesGrid.appendChild(faceItem);
+        });
+      }
+
+      async function compareWithTargetFace(detectedFace) {
+        if (!targetFaceDescriptor || !detectedFace.descriptor) {
+          return null;
+        }
+
+        try {
+          const threshold = 0.6; // Similarity threshold (lower = more strict)
+
+          // Calculate distance between descriptors
+          const distance = faceapi.euclideanDistance(
+            detectedFace.descriptor,
+            targetFaceDescriptor.descriptor
+          );
+
+          // Convert distance to similarity (0-1 scale)
+          // Lower distance = higher similarity
+          const similarity = Math.max(0, 1 - distance);
+
+          if (similarity >= threshold) {
+            return {
+              face: targetFaceDescriptor.face,
+              similarity: similarity,
+              distance: distance,
+              isMatch: true,
+            };
+          } else {
+            return {
+              face: targetFaceDescriptor.face,
+              similarity: similarity,
+              distance: distance,
+              isMatch: false,
+            };
+          }
+        } catch (error) {
+          console.error("Error comparing faces:", error);
+          return null;
+        }
+      }
+
+      function displayComparisonResults(results) {
+        if (!results) {
+          comparisonResultsDiv.style.display = "none";
+          return;
+        }
+
+        const matchPercentage = Math.round(results.similarity * 100);
+
+        let resultsHTML = `
+          <h4>Target Face Recognition Results</h4>
+          <p><strong>Looking for:</strong> ${currentRollNumber}</p>
+          <p><strong>Target Face:</strong> ${results.face.name}</p>
+          <p><strong>Similarity:</strong> ${matchPercentage}%</p>
+        `;
+
+        if (results.isMatch) {
+          resultsHTML += `
+            <p style="color: #48bb78; font-weight: bold; font-size: 1.2em;">
+              ✅ MATCH FOUND! Face recognized successfully.
+            </p>
+          `;
+
+          // Take screenshot on first match
+          if (!matchFound) {
+            matchFound = true;
+            setTimeout(() => {
+              takeScreenshot();
+            }, 1000); // Small delay to ensure UI is updated
+          }
+        } else {
+          resultsHTML += `
+            <p style="color: #e53e3e; font-weight: bold;">
+              ❌ No match found. Similarity below threshold.
+            </p>
+          `;
+        }
+
+        comparisonResultsDiv.innerHTML = resultsHTML;
+        comparisonResultsDiv.style.display = "block";
+      }
+
+      function checkFaceApi() {
+        if (typeof faceapi === "undefined") {
+          statusDiv.textContent =
+            "Error: face-api.js not loaded. Please check the console for errors.";
+          return false;
+        }
+        return true;
+      }
+
+      let modelsLoaded = false; // Track if models are loaded
+
+      async function loadModels() {
+        if (!checkFaceApi()) return false;
+
+        if (modelsLoaded) {
+          log("Models already loaded");
+          return true;
+        }
+
+        try {
+          statusDiv.textContent = "Loading models...";
+          log("Loading face detection models...");
+
+          await faceapi.nets.ssdMobilenetv1.loadFromUri("modles");
+          log("SSD MobileNet model loaded");
+
+          await faceapi.nets.faceLandmark68Net.loadFromUri("modles");
+          log("Face Landmark model loaded");
+
+          await faceapi.nets.faceRecognitionNet.loadFromUri("modles");
+          log("Face Recognition model loaded");
+
+          modelsLoaded = true;
+          statusDiv.textContent = "Models loaded!";
+          log("All models loaded successfully");
+          return true;
+        } catch (error) {
+          statusDiv.textContent = "Error loading models: " + error.message;
+          console.error("Model loading error:", error);
+          log("Model loading error: " + error.message);
+          return false;
+        }
+      }
+
+      function isImageUrl(url) {
+        return url.match(/\.(jpeg|jpg|png)$/i);
+      }
+
+      function clearCanvas() {
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        log("Canvas cleared");
+      }
+
+      async function detectOnImage() {
+        if (!checkFaceApi() || !extImage.src) {
+          log("Cannot detect: faceapi not loaded or no image source");
+          clearCanvas();
+          return;
+        }
+
+        // Ensure models are loaded
+        if (!modelsLoaded) {
+          log("Models not loaded, loading now...");
+          const loaded = await loadModels();
+          if (!loaded) {
+            log("Failed to load models");
+            return;
+          }
+        }
+        try {
+          log("Starting face detection on image...");
+          log(
+            "Image dimensions: " +
+              extImage.naturalWidth +
+              "x" +
+              extImage.naturalHeight
+          );
+          log("Canvas dimensions: " + canvas.width + "x" + canvas.height);
+          const detections = await faceapi
+            .detectAllFaces(extImage)
+            .withFaceLandmarks()
+            .withFaceDescriptors();
+          log("Raw detections: " + detections.length);
+          currentDetections = detections;
+
+          const ctx = canvas.getContext("2d");
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          if (detections.length === 0) {
+            log("No faces detected in image");
+            comparisonResultsDiv.style.display = "none";
+            return;
+          }
+          detections.forEach((detection, index) => {
+            const box = detection.detection.box;
+            log(
+              `Face ${index + 1}: Box(${box.x}, ${box.y}, ${box.width}, ${
+                box.height
+              }), Score: ${detection.detection.score}`
+            );
+          });
+          const dims = faceapi.matchDimensions(canvas, extImage, true);
+          log("Matched dimensions: " + JSON.stringify(dims));
+          const resized = faceapi.resizeResults(detections, dims);
+          log("Resized detections: " + resized.length);
+          faceapi.draw.drawDetections(canvas, resized);
+          faceapi.draw.drawFaceLandmarks(canvas, resized);
+          log("Detection boxes drawn on canvas");
+          log("Detected " + detections.length + " faces in image");
+
+          // Compare with stored faces if available
+          if (detections.length > 0 && storedFaceDescriptors.length > 0) {
+            const comparisonResults = await compareWithTargetFace(
+              detections[0]
+            );
+            displayComparisonResults(comparisonResults);
+          }
+
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const hasContent = imageData.data.some((pixel) => pixel !== 0);
+          log("Canvas has content: " + hasContent);
+        } catch (error) {
+          console.error("Detection error:", error);
+          log("Detection error: " + error.message);
+          clearCanvas();
+        }
+      }
+
+      async function detectOnVideo() {
+        if (!checkFaceApi() || video.paused || video.ended) return;
+
+        // Ensure models are loaded
+        if (!modelsLoaded) {
+          log("Models not loaded, loading now...");
+          const loaded = await loadModels();
+          if (!loaded) {
+            log("Failed to load models");
+            return;
+          }
+        }
+        try {
+          const detections = await faceapi
+            .detectAllFaces(video)
+            .withFaceLandmarks()
+            .withFaceDescriptors();
+          currentDetections = detections;
+
+          const dims = faceapi.matchDimensions(canvas, video, true);
+          const resized = faceapi.resizeResults(detections, dims);
+          const ctx = canvas.getContext("2d");
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          faceapi.draw.drawDetections(canvas, resized);
+          faceapi.draw.drawFaceLandmarks(canvas, resized);
+          if (detections.length > 0) {
+            log("Detected " + detections.length + " faces in video");
+
+            // Compare with stored faces if available
+            if (storedFaceDescriptors.length > 0) {
+              const comparisonResults = await compareWithTargetFace(
+                detections[0]
+              );
+              displayComparisonResults(comparisonResults);
+            }
+          } else {
+            comparisonResultsDiv.style.display = "none";
+          }
+        } catch (error) {
+          console.error("Detection error:", error);
+          log("Detection error: " + error.message);
+          clearCanvas();
+        }
+      }
+
+      async function startExternalDetection() {
+        if (!checkFaceApi()) return;
+        currentRollNumber = rollNumberInput.value.trim();
+        log("Roll Number: " + currentRollNumber);
+
+        // Reset match tracking for new session
+        matchFound = false;
+        screenshotTaken = false;
+        targetFaceDescriptor = null;
+
+        clearInterval(detectionInterval);
+        clearCanvas();
+        statusDiv.textContent = "";
+        comparisonResultsDiv.style.display = "none";
+
+        // Step 1: Load faces from API first
+        showApiStatus("Loading faces from database...", "loading");
+        await loadStoredFaces();
+
+        // Step 2: Find target face for the specific roll number
+        if (storedFaceDescriptors.length > 0) {
+          targetFaceDescriptor = await findTargetFaceByRollNumber(
+            currentRollNumber
+          );
+          if (!targetFaceDescriptor) {
+            statusDiv.textContent = `No face found for roll number: ${currentRollNumber}. Please check the roll number or add the face to the database.`;
+            return;
+          }
+        } else {
+          statusDiv.textContent = "No faces found in database.";
+          return;
+        }
+
+        const modelsLoadedSuccessfully = await loadModels();
+        if (!modelsLoadedSuccessfully) {
+          statusDiv.textContent =
+            "Failed to load face detection models. Please refresh and try again.";
+          return;
+        }
+        if (cameraMode === "local") {
+          // Local camera mode
+          extImage.style.display = "none";
+          video.style.display = "block";
+          canvas.style.display = "block";
+          if (currentStream) {
+            currentStream.getTracks().forEach((track) => track.stop());
+          }
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+            });
+            video.srcObject = stream;
+            currentStream = stream;
+            video.onloadeddata = () => {
+              statusDiv.textContent = `Searching for face matching roll number: ${currentRollNumber}...`;
+              log("Local camera loaded successfully");
+              detectionInterval = setInterval(detectOnVideo, 500);
+            };
+          } catch (err) {
+            statusDiv.textContent = "Could not access local camera.";
+            log("Error accessing local camera: " + err);
+          }
+        } else {
+          // External camera mode
+          const url = cameraUrlInput.value.trim();
+          if (!url) {
+            statusDiv.textContent = "Please enter a camera URL.";
+            return;
+          }
+          log("Testing URL: " + url);
+          if (isImageUrl(url)) {
+            log("Using image mode");
+            video.style.display = "none";
+            extImage.style.display = "block";
+            canvas.style.display = "block";
+            extImage.src = url;
+            extImage.onload = async () => {
+              log("Image loaded successfully");
+              await detectOnImage();
+              detectionInterval = setInterval(detectOnImage, 2000);
+            };
+            extImage.onerror = (e) => {
+              statusDiv.textContent = "Failed to load image from URL.";
+              log("Image load error: " + e);
+              clearCanvas();
+            };
+          } else {
+            log("Using video mode");
+            extImage.style.display = "none";
+            video.style.display = "block";
+            canvas.style.display = "block";
+            video.src = url;
+            video.onloadeddata = () => {
+              statusDiv.textContent = `Searching for face matching roll number: ${currentRollNumber}...`;
+              log("Video loaded successfully");
+              detectionInterval = setInterval(detectOnVideo, 500);
+            };
+            video.onerror = (e) => {
+              statusDiv.textContent = "Failed to load video from URL.";
+              log("Video load error: " + e);
+              log("Trying as image...");
+              extImage.style.display = "block";
+              video.style.display = "none";
+              canvas.style.display = "block";
+              extImage.src = url;
+              extImage.onload = async () => {
+                log("Image loaded as fallback");
+                await detectOnImage();
+                detectionInterval = setInterval(detectOnImage, 2000);
+              };
+              extImage.onerror = (e2) => {
+                log("Image fallback also failed: " + e2);
+                clearCanvas();
+              };
+            };
+          }
+        }
+      }
+
+      // Initialize the page
+      window.addEventListener("load", () => {
+        // Page is ready, but don't auto-load faces
+        // Faces will be loaded when user starts detection
+
+        // Test API connection on page load
+        testApiConnection();
+      });
+
+      async function testApiConnection() {
+        console.log("Testing API connection...");
+        console.log("Frontend running on:", window.location.origin);
+        const apiUrl = getApiUrl();
+        console.log("API URL being used:", apiUrl);
+        console.log("API_BASE_URL:", API_BASE_URL);
+        console.log("API_ENDPOINT:", API_ENDPOINT);
+        try {
+          const response = await fetch(apiUrl, {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
+          });
+          console.log("API Test - Status:", response.status);
+          console.log(
+            "API Test - Content-Type:",
+            response.headers.get("content-type")
+          );
+
+          if (response.ok) {
+            const text = await response.text();
+            console.log("API Test - Response preview:", text.substring(0, 100));
+            console.log("✅ API connection successful");
+          } else {
+            console.log("❌ API connection failed:", response.status);
+          }
+        } catch (error) {
+          console.log("❌ API connection error:", error.message);
+        }
+      }
+    </script>
+  </body>
+</html>
